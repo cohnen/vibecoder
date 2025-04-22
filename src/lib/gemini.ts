@@ -97,9 +97,10 @@ function processGeminiResponse(content: string, includeHelper = true): Processed
   }
 
   // Add the gemini helper content to the generated code only if includeHelper is true
-  if (includeHelper && geminiAppHelper) {
+  // we only add the helper if it's not already in the code
+  if (includeHelper && geminiAppHelper && !result.code.includes('///////GEMINI HELPER')) {
     result.code = `${result.code}
-    // ADDED THE GEMINI HELPER
+    ///////GEMINI HELPER
     ${geminiAppHelper}`;
   }
   
@@ -121,7 +122,8 @@ function createSystemPrompt(options: { includeHelper: boolean; includeSampleCode
   All the code, dont abbreviate.
   Important: Add at the begining of the script all required scope permissions as comments.
   In case you want to add some html code to the script do inline html, and try to avoid external files for html. 
-  All content should be toegther in one single js block.
+  All content should be together in one single js block.
+  Use async and await for all functions that use promises but ensure you encapsulate them in a function that is not async.
 
   For example: Just add what is needed to the top of the script.
   /**
@@ -155,11 +157,27 @@ function createSystemPrompt(options: { includeHelper: boolean; includeSampleCode
 export async function generateScript(
   prompt: string,
   apiKey: string,
-  model = 'gemini-pro',
+  model = 'gemini-2.5-pro',
   options = { includeHelper: true, includeSampleCode: true }
 ): Promise<{ success: boolean; content?: string; code?: string; explanation?: string; error?: string; responseTimeMs?: number }> {
-  // If model is not correctly formatted, use default
-  const modelId = model === 'gemini-flash' ? 'gemini-2.5-flash-preview-04-17' : 'gemini-2.5-pro-preview-03-25';
+  // Map UI model IDs to actual API model IDs
+  let modelId;
+  switch (model) {
+    case 'gemini-2.5-pro':
+      modelId = 'gemini-2.5-pro-preview-03-25';
+      break;
+    case 'gemini-pro':
+      modelId = 'gemini-1.5-pro';
+      break;
+    case 'gemini-2.5-flash':
+      modelId = 'gemini-2.5-flash-preview-04-17';
+      break;
+    case 'gemini-flash':
+      modelId = 'gemini-2.0-flash';
+      break;
+    default:
+      modelId = 'gemini-2.5-pro-preview-03-25';
+  }
   
   // Start timing the request
   const startTime = performance.now();
@@ -275,8 +293,24 @@ export async function* generateScriptStream(
   model = 'gemini-pro',
   options = { includeHelper: true, includeSampleCode: true }
 ): AsyncGenerator<StreamResponse> {
-  // If model is not correctly formatted, use default
-  const modelId = model === 'gemini-flash' ? 'gemini-2.5-flash-preview-04-17' : 'gemini-2.5-pro-preview-03-25';
+  // Map UI model IDs to actual API model IDs
+  let modelId;
+  switch (model) {
+    case 'gemini-2.5-pro':
+      modelId = 'gemini-2.5-pro-preview-03-25';
+      break;
+    case 'gemini-pro':
+      modelId = 'gemini-1.5-pro';
+      break;
+    case 'gemini-2.5-flash':
+      modelId = 'gemini-2.5-flash-preview-04-17';
+      break;
+    case 'gemini-flash':
+      modelId = 'gemini-2.0-flash';
+      break;
+    default:
+      modelId = 'gemini-2.5-pro-preview-03-25';
+  }
   
   // Start timing the request
   const startTime = performance.now();

@@ -1,54 +1,108 @@
-# React + TypeScript + Vite
+# VibeCoder by ixigo
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+VibeCoder is a modern web application that helps users build Google Apps Script applications through a simple, intuitive interface. It leverages the Gemini API to generate ready-to-use Google Apps Scripts based on natural language descriptions.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **AI-Powered Script Generation**: Describe what you want to build, and VibeCoder generates complete, production-ready Google Apps Scripts
+- **Interactive UI**: Modern, responsive design with animations and visual feedback
+- **Voice Input**: Speak your script requirements instead of typing
+- **Script Refinement**: Get feedback on generated scripts and request improvements
+- **Idea Suggestions**: Browse AI-generated script ideas for inspiration
+- **Token Usage Optimization**: Control token usage with customizable settings
+- **Syntax Highlighting**: Easily read and understand the generated code
+- **Detailed Explanations**: Each script comes with instructions on how to use and deploy it
 
-## Expanding the ESLint configuration
+## Technology Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- React 19
+- TypeScript
+- Vite
+- Framer Motion for animations
+- TailwindCSS for styling
+- Gemini AI API integration
+- Cloudflare Workers for deployment
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+## Getting Started
+
+### Prerequisites
+
+- Node.js (version 18 or higher)
+- npm or yarn
+- Gemini API key for script generation
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/cohnen/vibecoder.git
+
+# Navigate to project directory
+cd vibecoder
+
+# Install dependencies
+npm install
+# or
+yarn install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### Development
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
+```bash
+# Start development server
+npm run dev
+# or
+yarn dev
 ```
+
+### Build and Deploy
+
+```bash
+# Build for production
+npm run build
+# or
+yarn build
+
+# Deploy to Cloudflare
+npm run deploy
+# or
+yarn deploy
+```
+
+## Project Structure
+
+The project is organized as a modern React application with the following structure:
+- `/src`: Core source files
+- `/app`: Main application components
+- `/components`: Reusable UI components
+- `/lib`: Utility functions and API integration
+- `/public`: Static assets and helper files
+- `/worker`: Cloudflare Worker configuration
+
+## Attribution
+
+VibeCoder was built by Ernesto Cohnen (ernesto@ixigo.com) under the promotion of ixigo. It serves as a platform for building Google App Scripts quickly and efficiently.
+
+## License
+
+MIT License
+
+Copyright (c) 2025 Ernesto Cohnen, ixigo
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

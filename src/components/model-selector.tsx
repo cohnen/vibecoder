@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { Zap, Brain } from "lucide-react"
+import { Zap, Brain, Sparkles, Star } from "lucide-react"
 
 const MODELS = [
+  { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", icon: Sparkles, description: "Latest model, best for complex reasoning" },
   { id: "gemini-pro", name: "Gemini Pro", icon: Brain, description: "More capable, better for complex tasks" },
+  { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", icon: Star, description: "Latest fast model with improved capabilities" },
   { id: "gemini-flash", name: "Gemini Flash", icon: Zap, description: "Faster responses, good for simple tasks" }
 ]
 
