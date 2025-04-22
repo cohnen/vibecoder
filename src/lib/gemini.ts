@@ -106,15 +106,63 @@ function processGeminiResponse(content: string, includeHelper = true): Processed
   return result;
 }
 
+// Creates the system prompt needed for script generation
+function createSystemPrompt(options: { includeHelper: boolean; includeSampleCode: boolean }): string {
+  return `You are an expert Google Apps Script developer with years of experience creating 
+  automated workflows for Google Sheets, Docs, and other Google products. Your task is to write a well-commented, 
+  ready-to-use Apps Script that precisely fulfills the user's request. 
+  
+  Format your response with:
+  1. First, provide the complete code enclosed in a code block with \`\`\`js syntax
+  2. Then, provide a brief explanation of how the script works and any steps for deployment or usage. Explain how to setup GEMINI_API_KEY in the project properties if gemini is used.
+  
+  Make sure your code is complete, production-ready, and addresses all key aspects of the request. 
+  Give all the code in one file. 
+  All the code, dont abbreviate.
+  Important: Add at the begining of the script all required scope permissions as comments.
+  In case you want to add some html code to the script do inline html, and try to avoid external files for html. 
+  All content should be toegther in one single js block.
+
+  For example: Just add what is needed to the top of the script.
+  /**
+   * @OnlyCurrentDoc // Grants access to the current spreadsheet
+   * @OAuthScope https://www.googleapis.com/auth/documents // Grants access to create/modify Google Docs
+   * @OAuthScope https://www.googleapis.com/auth/drive // Grants access to Drive files/folders (copying, finding, trashing)
+   * @OAuthScope https://www.googleapis.com/auth/script.send_mail // Grants permission to send email as the user
+   * @OAuthScope https://www.googleapis.com/auth/script.container.ui // Grants permission show UI elements like alerts/sidebars
+   * @OAuthScope https://www.googleapis.com/auth/spreadsheets.currentonly // Explicit scope for current sheet access
+   */
+
+  ${options.includeHelper ? `
+  <gemini-app-helper>
+  If you plan to use any LLM/AI generative functions you will have in context a helper that it's used like these instructions:
+  (not all the problems will require AI/LLM functions, but you will have them available if needed)
+  const genAI = new GeminiApp(PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY"));
+
+  ${geminiAppDocs || '// Gemini helper not loaded'}
+  </gemini-app-helper>
+  ` : ''}
+
+  ${options.includeSampleCode ? `
+  <sample-code-and-helpers>
+  ${sampleCodeAndHelpers || '// Sample code not loaded'}
+  </sample-code-and-helpers>
+  ` : ''}
+  `;
+}
+
 // Function to generate code using Gemini API
 export async function generateScript(
   prompt: string,
   apiKey: string,
   model = 'gemini-pro',
   options = { includeHelper: true, includeSampleCode: true }
-): Promise<{ success: boolean; content?: string; code?: string; explanation?: string; error?: string }> {
+): Promise<{ success: boolean; content?: string; code?: string; explanation?: string; error?: string; responseTimeMs?: number }> {
   // If model is not correctly formatted, use default
   const modelId = model === 'gemini-flash' ? 'gemini-2.5-flash-preview-04-17' : 'gemini-2.5-pro-preview-03-25';
+  
+  // Start timing the request
+  const startTime = performance.now();
   
   try {
     // Check if static files are loaded, if not try to load them
@@ -122,47 +170,7 @@ export async function generateScript(
       await loadStaticPrompts();
     }
 
-    const systemPrompt = `You are an expert Google Apps Script developer with years of experience creating 
-    automated workflows for Google Sheets, Docs, and other Google products. Your task is to write a well-commented, 
-    ready-to-use Apps Script that precisely fulfills the user's request. 
-    
-    Format your response with:
-    1. First, provide the complete code enclosed in a code block with \`\`\`js syntax
-    2. Then, provide a brief explanation of how the script works and any steps for deployment or usage. Explain how to setup GEMINI_API_KEY in the project properties if gemini is used.
-    
-    Make sure your code is complete, production-ready, and addresses all key aspects of the request. 
-    Give all the code in one file. 
-    All the code, dont abbreviate.
-    Important: Add at the begining of the script all required scope permissions as comments.
-    In case you want to add some html code to the script do inline html, and try to avoid external files for html. 
-    All content should be toegther in one single js block.
-
-    For example: Just add what is needed to the top of the script.
-    /**
-     * @OnlyCurrentDoc // Grants access to the current spreadsheet
-     * @OAuthScope https://www.googleapis.com/auth/documents // Grants access to create/modify Google Docs
-     * @OAuthScope https://www.googleapis.com/auth/drive // Grants access to Drive files/folders (copying, finding, trashing)
-     * @OAuthScope https://www.googleapis.com/auth/script.send_mail // Grants permission to send email as the user
-     * @OAuthScope https://www.googleapis.com/auth/script.container.ui // Grants permission show UI elements like alerts/sidebars
-     * @OAuthScope https://www.googleapis.com/auth/spreadsheets.currentonly // Explicit scope for current sheet access
-     */
-
-    ${options.includeHelper ? `
-    <gemini-app-helper>
-    If you plan to use any LLM/AI generative functions you will have in context a helper that it's used like these instructions:
-    (not all the problems will require AI/LLM functions, but you will have them available if needed)
-    const genAI = new GeminiApp(PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY"));
-
-    ${geminiAppDocs || '// Gemini helper not loaded'}
-    </gemini-app-helper>
-    ` : ''}
-
-    ${options.includeSampleCode ? `
-    <sample-code-and-helpers>
-    ${sampleCodeAndHelpers || '// Sample code not loaded'}
-    </sample-code-and-helpers>
-    ` : ''}
-    `;
+    const systemPrompt = createSystemPrompt(options);
     
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
@@ -198,9 +206,14 @@ export async function generateScript(
     if (!response.ok) {
       const errorData = await response.json();
       console.error('Gemini API error:', errorData);
+      // Calculate elapsed time
+      const endTime = performance.now();
+      const responseTimeMs = Math.round(endTime - startTime);
+      
       return { 
         success: false, 
-        error: `API error (${response.status}): ${errorData.error?.message || 'Unknown error'}` 
+        error: `API error (${response.status}): ${errorData.error?.message || 'Unknown error'}`,
+        responseTimeMs
       };
     }
     
@@ -209,10 +222,15 @@ export async function generateScript(
     // Extract the generated text from the response
     const generatedContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
     
+    // Calculate elapsed time
+    const endTime = performance.now();
+    const responseTimeMs = Math.round(endTime - startTime);
+    
     if (!generatedContent) {
       return { 
         success: false, 
-        error: 'No content was generated' 
+        error: 'No content was generated',
+        responseTimeMs
       };
     }
     
@@ -223,14 +241,211 @@ export async function generateScript(
       success: true, 
       content: generatedContent,
       code: processed.code,
-      explanation: processed.explanation
+      explanation: processed.explanation,
+      responseTimeMs
     };
     
   } catch (error) {
+    // Calculate elapsed time even on error
+    const endTime = performance.now();
+    const responseTimeMs = Math.round(endTime - startTime);
+    
     console.error('Script generation error:', error);
     return { 
       success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error occurred' 
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      responseTimeMs 
+    };
+  }
+}
+
+// Stream interface for response handling
+export interface StreamResponse {
+  done: boolean;
+  content?: string;
+  error?: string;
+  responseTimeMs?: number;
+  firstChunkTimeMs?: number;
+}
+
+// Function to generate code using Gemini API with streaming
+export async function* generateScriptStream(
+  prompt: string,
+  apiKey: string,
+  model = 'gemini-pro',
+  options = { includeHelper: true, includeSampleCode: true }
+): AsyncGenerator<StreamResponse> {
+  // If model is not correctly formatted, use default
+  const modelId = model === 'gemini-flash' ? 'gemini-2.5-flash-preview-04-17' : 'gemini-2.5-pro-preview-03-25';
+  
+  // Start timing the request
+  const startTime = performance.now();
+  let firstChunkTime: number | null = null;
+  
+  try {
+    // Check if static files are loaded, if not try to load them
+    if (!geminiAppHelper || !sampleCodeAndHelpers) {
+      await loadStaticPrompts();
+    }
+
+    const systemPrompt = createSystemPrompt(options);
+    
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:streamGenerateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { 
+                  text: systemPrompt
+                },
+                { 
+                  text: prompt 
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 50000,
+          }
+        }),
+      }
+    );
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Gemini API streaming error:', errorData);
+      
+      // Calculate elapsed time
+      const endTime = performance.now();
+      const responseTimeMs = Math.round(endTime - startTime);
+      
+      yield { 
+        done: true, 
+        error: `API error (${response.status}): ${errorData.error?.message || 'Unknown error'}`,
+        responseTimeMs
+      };
+      return;
+    }
+    
+    if (!response.body) {
+      // Calculate elapsed time
+      const endTime = performance.now();
+      const responseTimeMs = Math.round(endTime - startTime);
+      
+      yield { 
+        done: true, 
+        error: 'Stream response body is null',
+        responseTimeMs
+      };
+      return;
+    }
+    
+    // Process the streamed response
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let accumulatedContent = '';
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      
+      if (done) {
+        // Process the final accumulated content
+        const endTime = performance.now();
+        const responseTimeMs = Math.round(endTime - startTime);
+        const firstChunkTimeMs = firstChunkTime ? Math.round(firstChunkTime - startTime) : null;
+        
+        if (accumulatedContent) {
+          // Don't process content twice - just return the accumulated content
+          yield { 
+            done: true, 
+            content: accumulatedContent,
+            responseTimeMs,
+            firstChunkTimeMs: firstChunkTimeMs || undefined
+          };
+        } else {
+          yield { 
+            done: true, 
+            error: 'No content was generated in the stream',
+            responseTimeMs,
+            firstChunkTimeMs: firstChunkTimeMs || undefined
+          };
+        }
+        break;
+      }
+      
+      try {
+        const chunk = decoder.decode(value, { stream: true });
+        // The API returns JSON objects on each line
+        const lines = chunk.split('\n').filter(line => line.trim());
+        
+        for (const line of lines) {
+          if (line.includes('"text":')) {
+            try {
+              // Parse the JSON response line
+              const data = JSON.parse(line);
+              // Extract content from the chunk
+              const chunkContent = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+              accumulatedContent += chunkContent;
+              
+              // Record time of first chunk if not already set
+              if (!firstChunkTime && chunkContent.trim()) {
+                firstChunkTime = performance.now();
+              }
+              
+              const currentTime = performance.now();
+              const responseTimeMs = Math.round(currentTime - startTime);
+              const firstChunkTimeMs = firstChunkTime ? Math.round(firstChunkTime - startTime) : undefined;
+              
+              // Yield the intermediate chunk
+              yield {
+                done: false,
+                content: chunkContent,
+                responseTimeMs,
+                firstChunkTimeMs
+              };
+              
+            } catch (parseError) {
+              console.warn('Error parsing JSON chunk:', parseError);
+              // Continue even if one chunk fails to parse
+            }
+          }
+        }
+      } catch (decodeError) {
+        const endTime = performance.now();
+        const responseTimeMs = Math.round(endTime - startTime);
+        const firstChunkTimeMs = firstChunkTime ? Math.round(firstChunkTime - startTime) : undefined;
+        
+        console.error('Error decoding stream chunk:', decodeError);
+        yield { 
+          done: true, 
+          error: 'Error processing streamed response',
+          responseTimeMs,
+          firstChunkTimeMs
+        };
+        break;
+      }
+    }
+  } catch (error) {
+    const endTime = performance.now();
+    const responseTimeMs = Math.round(endTime - startTime);
+    const firstChunkTimeMs = firstChunkTime ? Math.round(firstChunkTime - startTime) : undefined;
+    
+    console.error('Script streaming error:', error);
+    yield { 
+      done: true, 
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      responseTimeMs,
+      firstChunkTimeMs
     };
   }
 }

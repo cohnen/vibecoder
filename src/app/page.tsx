@@ -35,6 +35,8 @@ export default function Home() {
   const [includeGeminiHelper, setIncludeGeminiHelper] = useState(true)
   const [includeSampleCode, setIncludeSampleCode] = useState(true)
   const [showSettings, setShowSettings] = useState(false)
+  const [elapsedTime, setElapsedTime] = useState(0)
+  const timerRef = useRef<NodeJS.Timeout | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Check for API key on component mount and verify it
@@ -142,6 +144,15 @@ export default function Home() {
     setFeedbackGiven(false)
     setShowRefinePrompt(false)
     setError(null)
+    
+    // Reset and start elapsed time counter
+    setElapsedTime(0)
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+    }
+    timerRef.current = setInterval(() => {
+      setElapsedTime(prev => prev + 1)
+    }, 1000)
 
     try {
       // Call the Gemini API to generate the script with token usage settings
@@ -149,6 +160,12 @@ export default function Home() {
         includeHelper: includeGeminiHelper,
         includeSampleCode: includeSampleCode
       })
+      
+      // Stop the timer
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
       
       if (result.success) {
         // Trim the generated code to remove any extra whitespace at the beginning or end
@@ -169,6 +186,12 @@ export default function Home() {
     } catch (error) {
       console.error("Error generating script:", error)
       setError("An unexpected error occurred. Please try again.")
+      
+      // Stop the timer on error
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
     } finally {
       setIsGenerating(false)
       setShowFeedback(true)
@@ -238,6 +261,15 @@ export default function Home() {
     setFeedbackGiven(false)
     setShowRefinePrompt(false)
     setError(null)
+    
+    // Reset and start elapsed time counter
+    setElapsedTime(0)
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+    }
+    timerRef.current = setInterval(() => {
+      setElapsedTime(prev => prev + 1)
+    }, 1000)
 
     try {
       // Prepare a more specific prompt that includes the refinement request
@@ -248,6 +280,12 @@ export default function Home() {
         includeHelper: includeGeminiHelper,
         includeSampleCode: includeSampleCode
       })
+      
+      // Stop the timer
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
       
       if (result.success) {
         // Trim the generated code to remove any extra whitespace at the beginning or end
@@ -268,6 +306,12 @@ export default function Home() {
     } catch (error) {
       console.error("Error refining script:", error)
       setError("An unexpected error occurred while refining the script. Please try again.")
+      
+      // Stop the timer on error
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
     } finally {
       setIsGenerating(false)
       setShowFeedback(true)
@@ -296,7 +340,7 @@ export default function Home() {
   };
   
   // Simple highlighter function for JavaScript syntax
-  const highlightCode = (line: string): React.ReactNode => {
+  const highlightCode = (line: string, lineNumber: number): React.ReactNode => {
     // Colors based on theme
     const colors = {
       keyword: 'text-purple-300',
@@ -322,13 +366,13 @@ export default function Home() {
       // This is a very simplistic approach - a real syntax highlighter would be more robust
       const stringRegex = /(["'])(.*?)\1/g;
       
-      // Create parts with unique identifiers instead of indexes
+      // Create parts with unique identifiers based on line number and position
       const parts = line.split(stringRegex);
       
       return (
         <span>
           {parts.map((part, i) => {
-            const uniqueKey = `${line}-part-${i}-${part.substring(0, 3)}`;
+            const uniqueKey = `line-${lineNumber}-part-${i}`;
             
             // Every third part is a string (considering capturing groups)
             if (i % 3 === 2) {
@@ -345,8 +389,8 @@ export default function Home() {
             
             return (
               <span key={uniqueKey}>
-                {wordParts.map((word) => {
-                  const wordKey = `${uniqueKey}-${word}`;
+                {wordParts.map((word, j) => {
+                  const wordKey = `line-${lineNumber}-part-${i}-word-${j}`;
                   
                   if (keywords.includes(word)) {
                     return <span key={wordKey} className={colors.keyword}>{word}</span>;
@@ -365,8 +409,8 @@ export default function Home() {
     
     return (
       <span>
-        {wordParts.map((word) => {
-          const wordKey = `${line}-word-${word}`;
+        {wordParts.map((word, j) => {
+          const wordKey = `line-${lineNumber}-word-${j}`;
           
           if (keywords.includes(word)) {
             return <span key={wordKey} className={colors.keyword}>{word}</span>;
@@ -680,6 +724,9 @@ export default function Home() {
                               />
                             ))}
                           </motion.div>
+                          <div className="mt-4 text-sm text-gray-600">
+                            Time elapsed: {elapsedTime} seconds
+                          </div>
                         </motion.div>
                       )}
 
@@ -764,7 +811,7 @@ export default function Home() {
                                       const codeKey = `code-line-${lineNumber}`;
                                       return (
                                         <div key={codeKey} className="leading-5">
-                                          {highlightCode(line)}
+                                          {highlightCode(line, lineNumber)}
                                         </div>
                                       );
                                     })}
@@ -912,7 +959,7 @@ export default function Home() {
             transition={{ delay: 0.5 }}
           >
             <Code className="h-5 w-5 text-[#FF6B35]" />
-            <p className="text-sm text-gray-600">VibeCoder © {new Date().getFullYear()}</p>
+            <p className="text-sm text-gray-600">VibeCoder - Built with care by ixigo — and open to all.</p>
           </motion.div>
           <motion.div
             className="mt-4 md:mt-0"

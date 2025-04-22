@@ -277,7 +277,7 @@ export default function VoiceInput({ onTranscript, disabled = false }: VoiceInpu
             aria-label="Select language"
           >
             <Globe className="h-4 w-4" />
-            <span className="absolute -bottom-1 -right-1 text-xs block">{selectedLanguage.flag}</span>
+            <span className="absolute -bottom-1 -right-1 text-m block">{selectedLanguage.flag}</span>
           </Button>
         </div>
         
