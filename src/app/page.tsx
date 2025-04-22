@@ -32,6 +32,9 @@ export default function Home() {
   const [dynamicIdeas, setDynamicIdeas] = useState<Array<{short: string; long: string}>>([])
   const [isLoadingIdeas, setIsLoadingIdeas] = useState(false)
   const [showCopiedNotification, setShowCopiedNotification] = useState(false)
+  const [includeGeminiHelper, setIncludeGeminiHelper] = useState(true)
+  const [includeSampleCode, setIncludeSampleCode] = useState(true)
+  const [showSettings, setShowSettings] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Check for API key on component mount and verify it
@@ -141,8 +144,11 @@ export default function Home() {
     setError(null)
 
     try {
-      // Call the Gemini API to generate the script
-      const result = await generateScript(inputValue, apiKey, selectedModel)
+      // Call the Gemini API to generate the script with token usage settings
+      const result = await generateScript(inputValue, apiKey, selectedModel, {
+        includeHelper: includeGeminiHelper,
+        includeSampleCode: includeSampleCode
+      })
       
       if (result.success) {
         // Trim the generated code to remove any extra whitespace at the beginning or end
@@ -221,7 +227,7 @@ export default function Home() {
     }
   }
 
-  // Handle refinement submission
+  // Handle refinement submission with token usage settings
   const submitRefinement = async () => {
     if (!refinePrompt.trim() || !apiKey) return
 
@@ -237,8 +243,11 @@ export default function Home() {
       // Prepare a more specific prompt that includes the refinement request
       const refinementPrompt = `Original request: ${inputValue}\n\nRefinement needed: ${refinePrompt}\n\nPlease generate an improved script that addresses the refinement.`;
       
-      // Call the Gemini API to generate the refined script
-      const result = await generateScript(refinementPrompt, apiKey, selectedModel)
+      // Call the Gemini API to generate the refined script with token usage settings
+      const result = await generateScript(refinementPrompt, apiKey, selectedModel, {
+        includeHelper: includeGeminiHelper,
+        includeSampleCode: includeSampleCode
+      })
       
       if (result.success) {
         // Trim the generated code to remove any extra whitespace at the beginning or end
@@ -368,6 +377,11 @@ export default function Home() {
     );
   };
 
+  // Toggle settings panel
+  const toggleSettings = () => {
+    setShowSettings(!showSettings)
+  }
+
   return (
     <div className="min-h-screen bg-[#FFFAF5] flex flex-col">
       <header className="border-b border-[#FF6B35]/20 p-3 md:p-4">
@@ -474,15 +488,70 @@ export default function Home() {
                               <label htmlFor="prompt" className="block text-sm font-medium text-gray-700">
                                 Describe what you want to build
                               </label>
-                              <div className="flex items-center flex-shrink-0">
-                                <span className="text-sm text-gray-600 mr-2">Model:</span>
-                                <ModelSelector 
-                                  selectedModel={selectedModel}
-                                  onModelChange={handleModelChange}
-                                  disabled={isGenerating}
-                                />
+                              <div className="flex items-center flex-shrink-0 space-x-3">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={toggleSettings}
+                                  className="text-gray-600 hover:text-[#FF6B35]"
+                                >
+                                  <Settings className="h-4 w-4 mr-1" />
+                                  Settings
+                                </Button>
+                                <div className="flex items-center">
+                                  <span className="text-sm text-gray-600 mr-2">Model:</span>
+                                  <ModelSelector 
+                                    selectedModel={selectedModel}
+                                    onModelChange={handleModelChange}
+                                    disabled={isGenerating}
+                                  />
+                                </div>
                               </div>
                             </div>
+
+                            {/* Token Usage Settings */}
+                            <AnimatePresence>
+                              {showSettings && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: "auto" }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  transition={{ duration: 0.3 }}
+                                  className="bg-[#FFF5EB] border border-[#FF6B35]/20 rounded-md p-3 mb-2"
+                                >
+                                  <h3 className="text-sm font-medium text-gray-800 mb-2">Token Usage Settings</h3>
+                                  <div className="flex flex-col gap-2">
+                                    <div className="flex items-center">
+                                      <input
+                                        type="checkbox"
+                                        id="includeHelper"
+                                        checked={includeGeminiHelper}
+                                        onChange={(e) => setIncludeGeminiHelper(e.target.checked)}
+                                        className="mr-2 h-4 w-4 text-[#FF6B35] focus:ring-[#FF6B35]"
+                                      />
+                                      <label htmlFor="includeHelper" className="text-sm text-gray-700">
+                                        Include Gemini Helper (enables AI capabilities in generated code)
+                                      </label>
+                                    </div>
+                                    <div className="flex items-center">
+                                      <input
+                                        type="checkbox"
+                                        id="includeSampleCode"
+                                        checked={includeSampleCode}
+                                        onChange={(e) => setIncludeSampleCode(e.target.checked)}
+                                        className="mr-2 h-4 w-4 text-[#FF6B35] focus:ring-[#FF6B35]"
+                                      />
+                                      <label htmlFor="includeSampleCode" className="text-sm text-gray-700">
+                                        Include Sample Code (provides better examples but uses more tokens)
+                                      </label>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Disabling these options reduces token usage and speeds up generation, but may affect code quality for complex requests.
+                                    </p>
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
 
                             {/* Idea Chips */}
                             <IdeaChips 

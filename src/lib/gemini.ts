@@ -1,4 +1,39 @@
 // Utility functions for Gemini API integration
+let geminiAppHelper = '';
+let geminiAppDocs = '';
+let sampleCodeAndHelpers = '';
+
+// Function to fetch static text files on app initialization
+export async function loadStaticPrompts(): Promise<boolean> {
+  try {
+    const [geminiAppResponse, sampleCodeResponse, geminiAppDocsResponse] = await Promise.all([
+      fetch('/GeminiApp.txt'),
+      fetch('/AllCodeSamples.txt'),
+      fetch('/GeminiAppDocs.md')
+    ]);
+    
+    if (!geminiAppResponse.ok || !sampleCodeResponse.ok || !geminiAppDocsResponse.ok) {
+      console.error('Failed to load one or more static prompt files');
+      return false;
+    }
+    
+    geminiAppHelper = await geminiAppResponse.text();
+    sampleCodeAndHelpers = await sampleCodeResponse.text();
+    geminiAppDocs = await geminiAppDocsResponse.text();
+    
+    console.log('Successfully loaded static prompt files');
+    return true;
+  } catch (error) {
+    console.error('Error loading static prompt files:', error);
+    return false;
+  }
+}
+
+// Interface for processed content
+interface ProcessedContent {
+  code: string;
+  explanation: string;
+}
 
 // Verify if the API key is valid by making a simple test request
 export async function verifyApiKey(apiKey: string): Promise<boolean> {
@@ -19,13 +54,8 @@ export async function verifyApiKey(apiKey: string): Promise<boolean> {
   }
 }
 
-interface ProcessedContent {
-  code: string;
-  explanation: string;
-}
-
 // Parse content to separate code blocks from explanations
-function processGeminiResponse(content: string): ProcessedContent {
+function processGeminiResponse(content: string, includeHelper = true): ProcessedContent {
   const result: ProcessedContent = { 
     code: '',
     explanation: ''
@@ -65,6 +95,13 @@ function processGeminiResponse(content: string): ProcessedContent {
     // If no code blocks found, treat everything as code
     result.code = content;
   }
+
+  // Add the gemini helper content to the generated code only if includeHelper is true
+  if (includeHelper && geminiAppHelper) {
+    result.code = `${result.code}
+    // ADDED THE GEMINI HELPER
+    ${geminiAppHelper}`;
+  }
   
   return result;
 }
@@ -73,21 +110,59 @@ function processGeminiResponse(content: string): ProcessedContent {
 export async function generateScript(
   prompt: string,
   apiKey: string,
-  model = 'gemini-pro'
+  model = 'gemini-pro',
+  options = { includeHelper: true, includeSampleCode: true }
 ): Promise<{ success: boolean; content?: string; code?: string; explanation?: string; error?: string }> {
   // If model is not correctly formatted, use default
-  const modelId = model === 'gemini-flash' ? 'gemini-1.5-flash' : 'gemini-1.5-pro';
+  const modelId = model === 'gemini-flash' ? 'gemini-2.5-flash-preview-04-17' : 'gemini-2.5-pro-preview-03-25';
   
   try {
+    // Check if static files are loaded, if not try to load them
+    if (!geminiAppHelper || !sampleCodeAndHelpers) {
+      await loadStaticPrompts();
+    }
+
     const systemPrompt = `You are an expert Google Apps Script developer with years of experience creating 
     automated workflows for Google Sheets, Docs, and other Google products. Your task is to write a well-commented, 
     ready-to-use Apps Script that precisely fulfills the user's request. 
     
     Format your response with:
     1. First, provide the complete code enclosed in a code block with \`\`\`js syntax
-    2. Then, provide a brief explanation of how the script works and any steps for deployment or usage
+    2. Then, provide a brief explanation of how the script works and any steps for deployment or usage. Explain how to setup GEMINI_API_KEY in the project properties if gemini is used.
     
-    Make sure your code is complete, production-ready, and addresses all key aspects of the request.`;
+    Make sure your code is complete, production-ready, and addresses all key aspects of the request. 
+    Give all the code in one file. 
+    All the code, dont abbreviate.
+    Important: Add at the begining of the script all required scope permissions as comments.
+    In case you want to add some html code to the script do inline html, and try to avoid external files for html. 
+    All content should be toegther in one single js block.
+
+    For example: Just add what is needed to the top of the script.
+    /**
+     * @OnlyCurrentDoc // Grants access to the current spreadsheet
+     * @OAuthScope https://www.googleapis.com/auth/documents // Grants access to create/modify Google Docs
+     * @OAuthScope https://www.googleapis.com/auth/drive // Grants access to Drive files/folders (copying, finding, trashing)
+     * @OAuthScope https://www.googleapis.com/auth/script.send_mail // Grants permission to send email as the user
+     * @OAuthScope https://www.googleapis.com/auth/script.container.ui // Grants permission show UI elements like alerts/sidebars
+     * @OAuthScope https://www.googleapis.com/auth/spreadsheets.currentonly // Explicit scope for current sheet access
+     */
+
+    ${options.includeHelper ? `
+    <gemini-app-helper>
+    If you plan to use any LLM/AI generative functions you will have in context a helper that it's used like these instructions:
+    (not all the problems will require AI/LLM functions, but you will have them available if needed)
+    const genAI = new GeminiApp(PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY"));
+
+    ${geminiAppDocs || '// Gemini helper not loaded'}
+    </gemini-app-helper>
+    ` : ''}
+
+    ${options.includeSampleCode ? `
+    <sample-code-and-helpers>
+    ${sampleCodeAndHelpers || '// Sample code not loaded'}
+    </sample-code-and-helpers>
+    ` : ''}
+    `;
     
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
@@ -114,7 +189,7 @@ export async function generateScript(
             temperature: 0.7,
             topK: 40,
             topP: 0.95,
-            maxOutputTokens: 8192,
+            maxOutputTokens: 50000,
           }
         }),
       }
@@ -141,8 +216,8 @@ export async function generateScript(
       };
     }
     
-    // Process the response to separate code from explanation
-    const processed = processGeminiResponse(generatedContent);
+    // Process the response to separate code from explanation, passing the includeHelper option
+    const processed = processGeminiResponse(generatedContent, options.includeHelper);
     
     return { 
       success: true, 
@@ -163,11 +238,9 @@ export async function generateScript(
 // Generate idea chips using Gemini
 export async function generateIdeaChips(
   apiKey: string,
-  model = 'gemini-flash'
+  model = 'gemini-2.0-flash'
 ): Promise<{ success: boolean; ideas?: Array<{short: string; long: string}>; error?: string }> {
-  // If model is not correctly formatted, use default
-  const modelId = 'gemini-2.0-flash';
-  
+   
   try {
     const prompt = `Generate 5 specific, practical ideas for Google Apps Scripts that would be useful for business professionals. 
     Each idea should have both a short title (5-7 words) and a detailed description (1-2 sentences).
@@ -185,7 +258,7 @@ export async function generateIdeaChips(
     Return only valid JSON with no additional text.`;
     
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: {

@@ -1,0 +1,31 @@
+// GeminiApp class provides methods to generate content using Google's Gemini API
+class GeminiApp {
+  constructor(apiKey) {
+    this.apiKey = apiKey;
+    this.baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
+  }
+
+  async generateContent(prompt, options = {}) {
+    const model = options.model || 'gemini-1.5-pro';
+    const maxTokens = options.maxTokens || 2048;
+    const temperature = options.temperature || 0.7;
+    
+    const response = await UrlFetchApp.fetch(
+      `${this.baseUrl}/models/${model}:generateContent?key=${this.apiKey}`, 
+      {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: temperature,
+            maxOutputTokens: maxTokens,
+          }
+        })
+      }
+    );
+    
+    const result = JSON.parse(response.getContentText());
+    return result.candidates[0].content.parts[0].text;
+  }
+} 

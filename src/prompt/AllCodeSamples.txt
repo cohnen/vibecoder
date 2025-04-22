@@ -1,0 +1,49 @@
+// Example: Create a custom menu in Google Sheets
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('Custom Menu')
+    .addItem('Run Script', 'runMyFunction')
+    .addToUi();
+}
+
+// Example: Send an email with Gmail
+function sendEmail() {
+  GmailApp.sendEmail(
+    'recipient@example.com',
+    'Email Subject',
+    'Email body text',
+    {
+      htmlBody: '<p>HTML formatted <b>email body</b></p>',
+      attachments: [SpreadsheetApp.getActiveSpreadsheet().getAs(MimeType.PDF)]
+    }
+  );
+}
+
+// Example: Read and write data in Google Sheets
+function processSheetData() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const data = sheet.getDataRange().getValues();
+  
+  for (let i = 0; i < data.length; i++) {
+    // Process each row
+    if (data[i][0] === 'some condition') {
+      sheet.getRange(i + 1, 2).setValue('Updated value');
+    }
+  }
+}
+
+// Example: Create a Google Doc from a template
+function createDocFromTemplate() {
+  const templateId = 'your-template-doc-id';
+  const templateFile = DriveApp.getFileById(templateId);
+  const newFile = templateFile.makeCopy('New Document Title');
+  const newDoc = DocumentApp.openById(newFile.getId());
+  const body = newDoc.getBody();
+  
+  // Replace placeholders
+  body.replaceText('{{NAME}}', 'John Doe');
+  body.replaceText('{{DATE}}', new Date().toLocaleDateString());
+  
+  newDoc.saveAndClose();
+  return newFile.getUrl();
+} 

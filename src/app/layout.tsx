@@ -1,24 +1,24 @@
 import type React from "react"
 import "./globals.css"
-import type { Metadata } from "next"
-import { Inter } from "next/font/google"
-import { ThemeProvider } from "@/components/theme-provider"
+import { ThemeProvider } from "../components/theme-provider"
 
-const inter = Inter({ subsets: ["latin"] })
+// Apply Inter font via CSS
+const interFontClass = "font-sans" // This assumes you've configured Inter in your CSS
 
-export const metadata: Metadata = {
-  title: "VibeCoder - App Script Generator",
-  description: "Generate Google App Scripts with natural language",
+interface RootLayoutProps {
+  children: React.ReactNode
 }
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+}: RootLayoutProps) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <head>
+        <title>VibeCoder - App Script Generator</title>
+        <meta name="description" content="Generate Google App Scripts with natural language" />
+      </head>
+      <body className={interFontClass}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           {children}
         </ThemeProvider>
