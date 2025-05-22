@@ -12,6 +12,10 @@
 	},
 	"observability": {
 		"enabled": true
+	},
+	"vars": {
+		"GOOGLE_CLIENT_ID": "your_google_client_id_value_here_or_set_via_dashboard",
+		"GOOGLE_CLIENT_SECRET": "your_google_client_secret_value_here_or_set_via_dashboard"
 	}
 	/**
 	 * Smart Placement

@@ -2,9 +2,9 @@
 
 import type React from "react"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Copy, Send, ThumbsUp, Code, Blocks, RefreshCw, Sparkles, Settings, AlertCircle, Check } from "lucide-react"
+import { Copy, Send, ThumbsUp, Code, Blocks, RefreshCw, Sparkles, Settings, AlertCircle, Check, LogIn, LogOut, UserCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import confetti from "canvas-confetti"
@@ -39,38 +39,138 @@ export default function Home() {
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Check for API key on component mount and verify it
+  // Google Auth State
+  const [googleUser, setGoogleUser] = useState<any>(null);
+  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
+  const [isGoogleLoggedIn, setIsGoogleLoggedIn] = useState(false);
+  const [googleIdToken, setGoogleIdToken] = useState<string | null>(null);
+
+  // "Save to Drive" State
+  const [isSavingToDrive, setIsSavingToDrive] = useState(false);
+  const [driveSaveSuccess, setDriveSaveSuccess] = useState<string | null>(null);
+  const [driveSaveError, setDriveSaveError] = useState<string | null>(null);
+  const [savedScriptDriveId, setSavedScriptDriveId] = useState<string | null>(null);
+
+  // "Publish Script" State
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishSuccess, setPublishSuccess] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [deploymentDetails, setDeploymentDetails] = useState<any | null>(null);
+
+  const VITE_GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "YOUR_GOOGLE_CLIENT_ID_HERE";
+  const VITE_WORKER_CALLBACK_URL = import.meta.env.VITE_WORKER_CALLBACK_URL || "YOUR_WORKER_CALLBACK_URL_HERE";
+
+
+  // Effect to handle API key and Google Auth token processing
   useEffect(() => {
+    // API Key Logic
     const checkApiKey = async () => {
-      // Check if we're in the browser environment
       if (typeof window !== "undefined") {
-        const storedApiKey = localStorage.getItem("geminiApiKey")
-        
+        const storedApiKey = localStorage.getItem("geminiApiKey");
         if (storedApiKey) {
-          setApiKey(storedApiKey)
-          
-          // Verify the API key silently
+          setApiKey(storedApiKey);
           try {
-            const isValid = await verifyApiKey(storedApiKey)
+            const isValid = await verifyApiKey(storedApiKey);
             if (!isValid) {
-              console.warn("Stored API key is invalid")
-              setApiKeyModalOpen(true) // Show modal to update key if invalid
+              console.warn("Stored API key is invalid");
+              setApiKeyModalOpen(true);
             } else {
-              // Load idea chips if the API key is valid
-              loadIdeaChips(storedApiKey)
+              loadIdeaChips(storedApiKey);
             }
           } catch (error) {
-            console.error("Failed to verify API key:", error)
+            console.error("Failed to verify API key:", error);
           }
         } else {
-          // Show onboarding if no API key is found
-          setShowOnboarding(true)
+          setShowOnboarding(true);
         }
       }
+    };
+    checkApiKey();
+
+    // Google Auth Token Processing from URL Fragment
+    if (typeof window !== "undefined" && window.location.hash) {
+      const params = new URLSearchParams(window.location.hash.substring(1)); // Remove '#'
+      const accessToken = params.get("access_token");
+      const idToken = params.get("id_token");
+      const expiresIn = params.get("expires_in");
+
+      if (accessToken && idToken) {
+        setGoogleAccessToken(accessToken);
+        setGoogleIdToken(idToken);
+        setIsGoogleLoggedIn(true);
+
+        try {
+          const decodedToken = JSON.parse(atob(idToken.split('.')[1]));
+          setGoogleUser({ 
+            email: decodedToken.email, 
+            name: decodedToken.name, 
+            picture: decodedToken.picture 
+          });
+        } catch (e) {
+          console.error("Error decoding ID token:", e);
+          setError("Failed to process user information from Google login.");
+        }
+
+        // Clear the hash from the URL
+        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+      } else if (params.get("error")) {
+        setError(`Google Login Error: ${params.get("error_description") || params.get("error")}`);
+         window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+      }
+    }
+  }, []); // Run once on mount
+
+  const handleGoogleLogin = () => {
+    if (!VITE_GOOGLE_CLIENT_ID || VITE_GOOGLE_CLIENT_ID === "YOUR_GOOGLE_CLIENT_ID_HERE") {
+      setError("Google Client ID is not configured. Please set VITE_GOOGLE_CLIENT_ID in your .env file.");
+      alert("Google Client ID is not configured. Please set VITE_GOOGLE_CLIENT_ID in your .env file.");
+      return;
+    }
+    if (!VITE_WORKER_CALLBACK_URL || VITE_WORKER_CALLBACK_URL === "YOUR_WORKER_CALLBACK_URL_HERE") {
+       setError("Google Worker Callback URL is not configured. Please set VITE_WORKER_CALLBACK_URL in your .env file.");
+       alert("Google Worker Callback URL is not configured. Please set VITE_WORKER_CALLBACK_URL in your .env file.");
+      return;
+    }
+
+    // @ts-ignore - google is loaded from script in index.html
+    if (typeof google === 'undefined') {
+      setError("Google Identity Services library not loaded yet.");
+      console.error("Google Identity Services library not loaded yet.");
+      return;
     }
     
-    checkApiKey()
-  }, [])
+    try {
+      // @ts-ignore
+      const client = google.accounts.oauth2.initCodeClient({
+        client_id: VITE_GOOGLE_CLIENT_ID,
+        scope: 'openid email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/script.projects',
+        ux_mode: 'redirect',
+        redirect_uri: VITE_WORKER_CALLBACK_URL,
+        // The 'callback' parameter for initCodeClient is not used for 'redirect' ux_mode.
+        // The server-side handler at redirect_uri will process the code.
+      });
+      client.requestCode();
+    } catch (e) {
+      console.error("Error initializing Google login:", e);
+      setError("Could not initiate Google login. Please try again.");
+    }
+  };
+
+  const handleGoogleLogout = () => {
+    // @ts-ignore - google is loaded from script in index.html
+    if (googleUser?.email && googleIdToken && typeof google !== 'undefined' && google.accounts && google.accounts.id) {
+       // @ts-ignore
+      google.accounts.id.revoke(googleIdToken, (done: any) => { // Use idToken for revocation
+        console.log('Google token revoked.');
+      });
+    }
+    setGoogleUser(null);
+    setGoogleAccessToken(null);
+    setGoogleIdToken(null);
+    setIsGoogleLoggedIn(false);
+    // Optionally clear any related data in localStorage if needed
+  };
+
 
   // Load idea chips from Gemini
   const loadIdeaChips = async (key: string) => {
@@ -144,6 +244,14 @@ export default function Home() {
     setFeedbackGiven(false)
     setShowRefinePrompt(false)
     setError(null)
+    // Clear Drive save status on new generation
+    setDriveSaveSuccess(null);
+    setDriveSaveError(null);
+    setSavedScriptDriveId(null);
+    // Clear Publish status on new generation
+    setPublishSuccess(null);
+    setPublishError(null);
+    setDeploymentDetails(null);
     
     // Reset and start elapsed time counter
     setElapsedTime(0)
@@ -426,6 +534,119 @@ export default function Home() {
     setShowSettings(!showSettings)
   }
 
+  const handleSaveToDrive = async () => {
+    if (!generatedCode || !googleAccessToken) {
+      setDriveSaveError("Not logged in to Google or no script generated.");
+      // Clear any previous success message
+      setDriveSaveSuccess(null);
+      return;
+    }
+
+    setIsSavingToDrive(true);
+    setDriveSaveSuccess(null);
+    setDriveSaveError(null);
+    setSavedScriptDriveId(null); // Reset this as well
+    // Clear publish states when starting a new save
+    setPublishSuccess(null);
+    setPublishError(null);
+    setDeploymentDetails(null);
+
+    // Create a sanitized file name from the input prompt
+    const sanitizedInput = inputValue.substring(0, 40).replace(/[^\w\s.-]/gi, '').trim() || "Untitled";
+    const fileName = `VibeCoder - ${sanitizedInput}.gs`;
+
+    try {
+      const response = await fetch("/api/appscript/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scriptContent: generatedCode,
+          accessToken: googleAccessToken,
+          fileName: fileName
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setDriveSaveSuccess(`Script '${data.name}' saved! View on Drive: <a href="${data.webViewLink}" target="_blank" rel="noopener noreferrer" class="underline text-blue-600 hover:text-blue-800">Open Script</a>`);
+        setSavedScriptDriveId(data.fileId || data.scriptId);
+      } else {
+        let errorMessage = data.error || "Unknown error saving to Drive.";
+        // Check for specific error messages or statuses that indicate token expiry
+        if (data.needsReAuth || (response.status === 401 && (typeof data.error === 'string' && (data.error.toLowerCase().includes("token expired") || data.error.toLowerCase().includes("invalid token"))))) {
+            setDriveSaveError("Your Google session has expired. Please log out and log back in to continue.");
+            handleGoogleLogout(); // Automatically log out user
+        } else {
+          setDriveSaveError(errorMessage);
+        }
+      }
+    } catch (err: any) {
+      console.error("Save to Drive error:", err);
+      setDriveSaveError("An unexpected error occurred while saving: " + err.message);
+    } finally {
+      setIsSavingToDrive(false);
+    }
+  };
+
+  const handlePublishScript = async () => {
+    if (!savedScriptDriveId || !googleAccessToken) {
+      setPublishError("No script saved to Drive or not logged in to Google.");
+      setPublishSuccess(null); // Clear any previous success
+      return;
+    }
+
+    setIsPublishing(true);
+    setPublishSuccess(null);
+    setPublishError(null);
+    setDeploymentDetails(null);
+
+    try {
+      const response = await fetch("/api/appscript/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scriptId: savedScriptDriveId,
+          accessToken: googleAccessToken,
+          description: `Published from VibeCoder - ${inputValue.substring(0, 30).replace(/[^\w\s.-]/gi, '') || 'User Script'} on ${new Date().toLocaleDateString()}`
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setDeploymentDetails(data);
+        let message = `Script version ${data.versionNumber} published! Deployment ID: ${data.deploymentId}.`;
+        if (data.deploymentUrl) {
+          message += ` Web App URL: <a href="${data.deploymentUrl}" target="_blank" rel="noopener noreferrer" class="underline text-blue-600 hover:text-blue-800">${data.deploymentUrl}</a>`;
+        }
+        setPublishSuccess(message);
+      } else {
+        let errorDetail = "";
+        if (data.details) {
+          try {
+            errorDetail = typeof data.details === 'string' ? data.details : JSON.stringify(data.details);
+          } catch (e) {
+            errorDetail = String(data.details);
+          }
+        }
+        let errorMessage = `Publish failed: ${data.error || 'Unknown error'}. ${errorDetail}`;
+        if (data.needsReAuth || (response.status === 401 && (typeof data.error === 'string' && (data.error.toLowerCase().includes("token expired") || data.error.toLowerCase().includes("invalid token"))))) {
+          setPublishError("Your Google session has expired. Please log out and log back in to continue publishing.");
+          handleGoogleLogout(); // Automatically log out user
+        } else {
+          setPublishError(errorMessage);
+        }
+      }
+    } catch (err: any) {
+      console.error("Publish script error:", err);
+      setPublishError("An unexpected error occurred during publishing: " + err.message);
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+
   return (
     <div className="min-h-screen bg-[#FFFAF5] flex flex-col">
       <header className="border-b border-[#FF6B35]/20 p-3 md:p-4">
@@ -443,29 +664,75 @@ export default function Home() {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="flex items-center gap-2"
+            className="flex items-center gap-3" // Increased gap slightly for new elements
           >
+            {isGoogleLoggedIn && googleUser && (
+              <div className="flex items-center gap-2 text-sm text-gray-700">
+                {googleUser.picture ? (
+                  <img src={googleUser.picture} alt="User" className="w-7 h-7 rounded-full" />
+                ) : (
+                  <UserCircle className="w-6 h-6 text-gray-600" />
+                )}
+                <span>{googleUser.name || googleUser.email}</span>
+              </div>
+            )}
+            {isGoogleLoggedIn ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGoogleLogout}
+                className="border-[#FF6B35] text-[#FF6B35] hover:bg-[#FF6B35]/10"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Logout
+              </Button>
+            ) : (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleGoogleLogin}
+                className="bg-[#4285F4] hover:bg-[#4285F4]/90 text-white" // Google Blue
+              >
+                <LogIn className="mr-2 h-4 w-4" />
+                Login with Google
+              </Button>
+            )}
             {apiKey && (
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setApiKeyModalOpen(true)}
                 className="text-[#FF6B35] hover:bg-[#FF6B35]/10"
+                title="Gemini API Key Settings"
               >
                 <Settings className="h-5 w-5" />
-                <span className="sr-only">API Key Settings</span>
+                <span className="sr-only">Gemini API Key Settings</span>
               </Button>
             )}
-            <Button variant="outline" className="border-[#FF6B35] text-[#FF6B35] hover:bg-[#FF6B35]/10">
-              View Docs
-            </Button>
+            {/* Removed redundant "View Docs" button, assuming it's not the primary action here */}
           </motion.div>
         </div>
       </header>
 
       <main className="flex-1 container max-w-7xl mx-auto px-4 py-6 md:py-12 space-y-6 md:space-y-12">
+        {/* Display Global Error Messages */}
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4"
+            role="alert"
+          >
+            <strong className="font-bold">Error: </strong>
+            <span className="block sm:inline">{error}</span>
+            <span className="absolute top-0 bottom-0 right-0 px-4 py-3" onClick={() => setError(null)}>
+              <svg className="fill-current h-6 w-6 text-red-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>
+            </span>
+          </motion.div>
+        )}
+
         <AnimatePresence mode="wait">
-          {showOnboarding ? (
+          {showOnboarding && !apiKey ? ( // Ensure onboarding only shows if API key is missing
             <motion.div
               key="onboarding"
               initial={{ opacity: 0, y: 20 }}
@@ -474,7 +741,7 @@ export default function Home() {
               transition={{ duration: 0.5 }}
               className="max-w-md mx-auto"
             >
-              <ApiKeyModal isOpen={true} onClose={() => {}} onSave={saveApiKey} initialApiKey="" isOnboarding={true} />
+              <ApiKeyModal isOpen={true} onClose={() => setShowOnboarding(false)} onSave={saveApiKey} initialApiKey="" isOnboarding={true} />
             </motion.div>
           ) : (
             <motion.div
@@ -485,6 +752,10 @@ export default function Home() {
               transition={{ duration: 0.5 }}
               className="space-y-8 md:space-y-12"
             >
+              {/* Conditional rendering for main prompt UI based on Google Login for certain features */}
+              {/* For now, we assume Google Login is not a strict prerequisite for using the core Gemini functionality */}
+              {/* If it were, we might wrap the following section with: `isGoogleLoggedIn ? (...) : (<GoogleLoginPrompt />)` */}
+              
               <motion.div
                 className="text-center space-y-2 md:space-y-3"
                 initial={{ opacity: 0, y: 20 }}
@@ -495,6 +766,7 @@ export default function Home() {
                 <h2 className="text-3xl md:text-5xl font-bold text-[#FF6B35]">Building App Scripts.</h2>
                 <p className="max-w-2xl mx-auto text-md text-gray-600">
                   Describe what you want to build, and VibeCoder will generate a ready-to-use Google App Script for you.
+                  {isGoogleLoggedIn ? ` Welcome, ${googleUser?.name || googleUser?.email}!` : ' Login with Google to integrate with Drive and more.'}
                 </p>
               </motion.div>
 
@@ -763,10 +1035,80 @@ export default function Home() {
                                 <Copy className="mr-2 h-4 w-4" />
                                 Copy to Clipboard
                               </Button>
+
+                              {isGoogleLoggedIn && googleAccessToken && (
+                                <Button
+                                  variant="default" // Or "outline" depending on desired prominence
+                                  size="sm"
+                                  onClick={handleSaveToDrive}
+                                  disabled={isSavingToDrive || !generatedCode}
+                                  className="bg-green-600 hover:bg-green-700 text-white" // Example styling
+                                >
+                                  {isSavingToDrive ? "Saving..." : "Save to Google Drive"}
+                                  {/* Optionally add a Drive icon */}
+                                </Button>
+                              )}
                             </div>
                           </div>
+                          
+                          {/* Drive Save Feedback */}
+                          {driveSaveSuccess && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="mt-2 bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded text-sm"
+                            >
+                              <p dangerouslySetInnerHTML={{ __html: driveSaveSuccess }} />
+                            </motion.div>
+                          )}
+                          {driveSaveError && (
+                             <motion.div
+                              initial={{ opacity: 0, y: -10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="mt-2 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm"
+                            >
+                              {driveSaveError}
+                            </motion.div>
+                          )}
+                          
+                          {/* Publish Script Button and Feedback */}
+                          {isGoogleLoggedIn && savedScriptDriveId && (
+                            <div className="mt-4 pt-4 border-t border-gray-200">
+                              <Button
+                                variant="outline" // Or "default"
+                                size="sm"
+                                onClick={handlePublishScript}
+                                disabled={isPublishing}
+                                className="border-blue-600 text-blue-600 hover:bg-blue-50" // Example styling
+                              >
+                                <Sparkles className="mr-2 h-4 w-4" /> {/* Example Icon */}
+                                {isPublishing ? "Publishing..." : "Publish Script"}
+                              </Button>
 
-                          {error && (
+                              {publishSuccess && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: -10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  className="mt-2 bg-blue-50 border border-blue-200 text-blue-700 px-3 py-2 rounded text-sm"
+                                >
+                                  <p dangerouslySetInnerHTML={{ __html: publishSuccess }} />
+                                </motion.div>
+                              )}
+                              {publishError && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: -10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  className="mt-2 bg-orange-50 border border-orange-200 text-orange-700 px-3 py-2 rounded text-sm"
+                                >
+                                  {publishError}
+                                </motion.div>
+                              )}
+                            </div>
+                          )}
+
+
+                          {/* Global Error (from Gemini generation, etc.) */}
+                          {error && !driveSaveError && !publishError && ( // Avoid showing duplicate errors
                             <div className="bg-red-50 border border-red-100 text-red-600 rounded-md p-3 mb-4">
                               <p className="flex items-center">
                                 <AlertCircle className="h-4 w-4 mr-2" />
