@@ -25,7 +25,7 @@ export default function Home() {
   const [showRefinePrompt, setShowRefinePrompt] = useState(false)
   const [refinePrompt, setRefinePrompt] = useState("")
   const [apiKey, setApiKey] = useState<string | null>(null)
-  const [selectedModel, setSelectedModel] = useState("gemini-pro")
+  const [selectedModel, setSelectedModel] = useState("gemini-2.5-pro")
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [apiKeyModalOpen, setApiKeyModalOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -435,6 +435,8 @@ export default function Home() {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
+            onClick={() => window.location.reload()}
+            style={{ cursor: 'pointer' }}
           >
             <Blocks className="h-8 w-8 text-[#FF6B35]" />
             <h1 className="text-2xl font-bold text-[#FF6B35]">VibeCoder</h1>

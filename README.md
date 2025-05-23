@@ -69,6 +69,10 @@ npm run deploy
 yarn deploy
 ```
 
+## Hosted Version
+
+A free hosted version of VibeCoder is available at [https://vibecoder.ixigo.workers.dev/](https://vibecoder.ixigo.workers.dev/) for a limited time. Feel free to try it out without setting up your own instance.
+
 ## Project Structure
 
 The project is organized as a modern React application with the following structure:

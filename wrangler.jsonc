@@ -6,7 +6,7 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "vibecoder",
 	"main": "worker/index.ts",
-	"compatibility_date": "2025-04-21",
+	"compatibility_date": "2025-04-16",
 	"assets": {
 		"not_found_handling": "single-page-application"
 	},
