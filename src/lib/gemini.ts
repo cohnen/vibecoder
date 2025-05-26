@@ -5,12 +5,19 @@ let sampleCodeAndHelpers = '';
 
 // Function to fetch static text files on app initialization
 export async function loadStaticPrompts(): Promise<boolean> {
+  console.log('[loadStaticPrompts] Starting to load static prompt files');
   try {
     const [geminiAppResponse, sampleCodeResponse, geminiAppDocsResponse] = await Promise.all([
       fetch('/GeminiApp.txt'),
       fetch('/AllCodeSamples.txt'),
       fetch('/GeminiAppDocs.md')
     ]);
+    
+    console.log('[loadStaticPrompts] Fetch responses:', {
+      geminiApp: geminiAppResponse.ok,
+      sampleCode: sampleCodeResponse.ok,
+      geminiDocs: geminiAppDocsResponse.ok
+    });
     
     if (!geminiAppResponse.ok || !sampleCodeResponse.ok || !geminiAppDocsResponse.ok) {
       console.error('Failed to load one or more static prompt files');
@@ -21,10 +28,14 @@ export async function loadStaticPrompts(): Promise<boolean> {
     sampleCodeAndHelpers = await sampleCodeResponse.text();
     geminiAppDocs = await geminiAppDocsResponse.text();
     
-    console.log('Successfully loaded static prompt files');
+    console.log('[loadStaticPrompts] Successfully loaded static prompt files:', {
+      geminiAppHelperLength: geminiAppHelper.length,
+      sampleCodeLength: sampleCodeAndHelpers.length,
+      geminiDocsLength: geminiAppDocs.length
+    });
     return true;
   } catch (error) {
-    console.error('Error loading static prompt files:', error);
+    console.error('[loadStaticPrompts] Error loading static prompt files:', error);
     return false;
   }
 }
@@ -56,54 +67,93 @@ export async function verifyApiKey(apiKey: string): Promise<boolean> {
 
 // Parse content to separate code blocks from explanations
 function processGeminiResponse(content: string, includeHelper = true): ProcessedContent {
+  console.log('[processGeminiResponse] Starting processing with includeHelper:', includeHelper);
+  console.log('[processGeminiResponse] Content length:', content.length);
+  console.log('[processGeminiResponse] geminiAppHelper available:', !!geminiAppHelper);
+  
   const result: ProcessedContent = { 
     code: '',
     explanation: ''
   };
   
-  // Simple regex to find code blocks
-  const regex = /```[\w]*\n([\s\S]*?)```/g;
+  // More robust regex to find code blocks - handles various language specifiers
+  const codeBlockRegex = /```(?:js|javascript|typescript|ts)?\s*\n?([\s\S]*?)```/gi;
   const codeBlocks: string[] = [];
+  const codeBlockMatches: { match: string; code: string }[] = [];
   
-  // Extract all code blocks
-  let match: RegExpExecArray | null = regex.exec(content);
+  // Extract all code blocks and store both the full match and the code content
+  let match: RegExpExecArray | null;
+  match = codeBlockRegex.exec(content);
   while (match !== null) {
     if (match[1]) {
-      codeBlocks.push(match[1].trim());
+      const codeContent = match[1].trim();
+      codeBlocks.push(codeContent);
+      codeBlockMatches.push({
+        match: match[0], // Full match including ```
+        code: codeContent
+      });
+      console.log('[processGeminiResponse] Found code block of length:', codeContent.length);
     }
-    match = regex.exec(content);
+    match = codeBlockRegex.exec(content);
   }
   
+  console.log('[processGeminiResponse] Total code blocks found:', codeBlocks.length);
+  
   if (codeBlocks.length > 0) {
-    // Find the largest code block (likely the complete implementation)
-    result.code = codeBlocks.reduce((a, b) => a.length > b.length ? a : b, '');
+    // Merge all code blocks together with proper spacing
+    result.code = codeBlocks.join('\n\n').trim();
+    console.log('[processGeminiResponse] Merged all code blocks, total length:', result.code.length);
     
-    // For explanation, replace all code blocks with empty strings
+    // For explanation, remove all code blocks from the original content
     let explanationText = content;
     
-    // Reset regex
-    regex.lastIndex = 0;
-    
-    let tempMatch: RegExpExecArray | null = regex.exec(content);
-    while (tempMatch !== null) {
-      explanationText = explanationText.replace(tempMatch[0], '');
-      tempMatch = regex.exec(content);
+    // Remove each code block match from the explanation
+    for (const { match } of codeBlockMatches) {
+      explanationText = explanationText.replace(match, '');
     }
     
-    result.explanation = explanationText.trim();
+    // Clean up the explanation text
+    result.explanation = explanationText
+      .replace(/\n{3,}/g, '\n\n') // Replace multiple newlines with double newlines
+      .trim();
+    
+    console.log('[processGeminiResponse] Explanation length after cleanup:', result.explanation.length);
   } else {
-    // If no code blocks found, treat everything as code
-    result.code = content;
+    // Fallback: if no code blocks found, check for inline code or treat as code
+    console.log('[processGeminiResponse] No code blocks found, checking for inline code patterns');
+    
+    // Look for common code patterns that might not be in code blocks
+    const hasCodePatterns = /(?:function\s+\w+|const\s+\w+|let\s+\w+|var\s+\w+|class\s+\w+|import\s+|export\s+|\/\*\*|\/\/|console\.log|return\s+)/i.test(content);
+    
+    if (hasCodePatterns) {
+      console.log('[processGeminiResponse] Found code patterns, treating entire content as code');
+      result.code = content.trim();
+      result.explanation = '';
+    } else {
+      console.log('[processGeminiResponse] No code patterns found, treating as explanation');
+      result.code = '';
+      result.explanation = content.trim();
+    }
   }
 
   // Add the gemini helper content to the generated code only if includeHelper is true
   // we only add the helper if it's not already in the code
-  if (includeHelper && geminiAppHelper && !result.code.includes('///////GEMINI HELPER')) {
+  const hasHelperAlready = result.code.includes('///////GEMINI HELPER');
+  console.log('[processGeminiResponse] Helper check - includeHelper:', includeHelper, 'geminiAppHelper exists:', !!geminiAppHelper, 'already has helper:', hasHelperAlready);
+  
+  if (includeHelper && geminiAppHelper && !hasHelperAlready && result.code.trim()) {
+    const codeBeforeHelper = result.code.length;
+    // Ensure the helper is added at the very end with proper formatting
     result.code = `${result.code}
-    ///////GEMINI HELPER
-    ${geminiAppHelper}`;
+
+///////GEMINI HELPER
+${geminiAppHelper}`;
+    console.log('[processGeminiResponse] Added Gemini helper. Code length before:', codeBeforeHelper, 'after:', result.code.length);
+  } else {
+    console.log('[processGeminiResponse] Skipping helper addition');
   }
   
+  console.log('[processGeminiResponse] Final result - code length:', result.code.length, 'explanation length:', result.explanation.length);
   return result;
 }
 
@@ -114,7 +164,7 @@ function createSystemPrompt(options: { includeHelper: boolean; includeSampleCode
   ready-to-use Apps Script that precisely fulfills the user's request. 
   
   Format your response with:
-  1. First, provide the complete code enclosed in a code block with \`\`\`js syntax
+  1. First, provide the complete code enclosed in a code block with \`\`\`js syntax. IMPORTANT: All in a single code block.
   2. Then, provide a brief explanation of how the script works and any steps for deployment or usage. Explain how to setup GEMINI_API_KEY in the project properties if gemini is used.
   
   Make sure your code is complete, production-ready, and addresses all key aspects of the request. 
@@ -135,12 +185,19 @@ function createSystemPrompt(options: { includeHelper: boolean; includeSampleCode
    * @OAuthScope https://www.googleapis.com/auth/spreadsheets.currentonly // Explicit scope for current sheet access
    */
 
+  Some tips on Google Apps Script:
+  - Use async and await for all functions that use promises but ensure you encapsulate them in a function that is not async.
+  - Don't use Utilities.urlEncode, use simple encodeURIComponent instead.
+
   ${options.includeHelper ? `
   <gemini-app-helper>
   If you plan to use any LLM/AI generative functions you will have in context a helper that it's used like these instructions:
   (not all the problems will require AI/LLM functions, but you will have them available if needed)
   const genAI = new GeminiApp(PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY"));
 
+  IMPORTANT, in your script response assume that GeminiApp is already imported and available, you don't need to include that library. 
+  We just add here context to explain how to properly use it.
+  
   ${geminiAppDocs || '// Gemini helper not loaded'}
   </gemini-app-helper>
   ` : ''}
@@ -160,31 +217,41 @@ export async function generateScript(
   model = 'gemini-2.5-pro',
   options = { includeHelper: true, includeSampleCode: true }
 ): Promise<{ success: boolean; content?: string; code?: string; explanation?: string; error?: string; responseTimeMs?: number }> {
+  console.log('[generateScript] Starting generation with:', {
+    model,
+    promptLength: prompt.length,
+    options
+  });
+  
   // Map UI model IDs to actual API model IDs
-  let modelId;
+  let modelId: string;
   switch (model) {
     case 'gemini-2.5-pro':
-      modelId = 'gemini-2.5-pro-preview-03-25';
+      modelId = 'gemini-2.5-pro-preview-05-06';
       break;
     case 'gemini-pro':
       modelId = 'gemini-1.5-pro';
       break;
     case 'gemini-2.5-flash':
-      modelId = 'gemini-2.5-flash-preview-04-17';
+      modelId = 'gemini-2.5-flash-preview-05-20';
       break;
     case 'gemini-flash':
       modelId = 'gemini-2.0-flash';
       break;
     default:
-      modelId = 'gemini-2.5-pro-preview-03-25';
+      modelId = 'gemini-2.5-pro-preview-05-06';
   }
+  
+  console.log('[generateScript] Using model ID:', modelId);
   
   // Start timing the request
   const startTime = performance.now();
   
   try {
     // Check if static files are loaded, if not try to load them
+    console.log('[generateScript] Checking static files - geminiAppHelper:', !!geminiAppHelper, 'sampleCodeAndHelpers:', !!sampleCodeAndHelpers);
     if (!geminiAppHelper || !sampleCodeAndHelpers) {
+      console.log('[generateScript] Loading static prompts...');
       await loadStaticPrompts();
     }
 
@@ -223,7 +290,11 @@ export async function generateScript(
     
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('Gemini API error:', errorData);
+      console.error('[generateScript] Gemini API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorData
+      });
       // Calculate elapsed time
       const endTime = performance.now();
       const responseTimeMs = Math.round(endTime - startTime);
@@ -240,11 +311,18 @@ export async function generateScript(
     // Extract the generated text from the response
     const generatedContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
     
+    console.log('[generateScript] API response received:', {
+      hasContent: !!generatedContent,
+      contentLength: generatedContent?.length || 0,
+      candidatesCount: data.candidates?.length || 0
+    });
+    
     // Calculate elapsed time
     const endTime = performance.now();
     const responseTimeMs = Math.round(endTime - startTime);
     
     if (!generatedContent) {
+      console.log('[generateScript] No content generated');
       return { 
         success: false, 
         error: 'No content was generated',
@@ -253,7 +331,14 @@ export async function generateScript(
     }
     
     // Process the response to separate code from explanation, passing the includeHelper option
+    console.log('[generateScript] Processing response with includeHelper:', options.includeHelper);
     const processed = processGeminiResponse(generatedContent, options.includeHelper);
+    
+    console.log('[generateScript] Generation completed successfully:', {
+      responseTimeMs,
+      codeLength: processed.code.length,
+      explanationLength: processed.explanation.length
+    });
     
     return { 
       success: true, 
@@ -268,7 +353,11 @@ export async function generateScript(
     const endTime = performance.now();
     const responseTimeMs = Math.round(endTime - startTime);
     
-    console.error('Script generation error:', error);
+    console.error('[generateScript] Script generation error:', {
+      error,
+      message: error instanceof Error ? error.message : 'Unknown error occurred',
+      responseTimeMs
+    });
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -294,7 +383,7 @@ export async function* generateScriptStream(
   options = { includeHelper: true, includeSampleCode: true }
 ): AsyncGenerator<StreamResponse> {
   // Map UI model IDs to actual API model IDs
-  let modelId;
+  let modelId: string;
   switch (model) {
     case 'gemini-2.5-pro':
       modelId = 'gemini-2.5-pro-preview-03-25';
@@ -480,6 +569,80 @@ export async function* generateScriptStream(
       error: error instanceof Error ? error.message : 'Unknown error occurred',
       responseTimeMs,
       firstChunkTimeMs
+    };
+  }
+}
+
+// Generate a script name using Gemini Flash
+export async function generateScriptName(
+  description: string,
+  apiKey: string
+): Promise<{ success: boolean; name?: string; error?: string }> {
+  try {
+    const prompt = `Generate a concise, professional script name for a Google Apps Script based on this description: "${description}"
+
+Requirements:
+- Maximum 3-5 words
+- Use PascalCase (e.g., "EmailReportSender", "DataValidator")
+- Be descriptive but concise
+- Professional and clear
+- No special characters except underscores if needed
+
+Return ONLY the script name, nothing else.`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: prompt }]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 50,
+          }
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { 
+        success: false, 
+        error: `API error: ${errorData.error?.message || 'Unknown error'}`
+      };
+    }
+
+    const data = await response.json();
+    const generatedName = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+    if (!generatedName) {
+      return { 
+        success: false, 
+        error: 'No name was generated'
+      };
+    }
+
+    // Clean up the name (remove quotes, extra whitespace, etc.)
+    const cleanName = generatedName.replace(/['"]/g, '').trim();
+
+    return { 
+      success: true, 
+      name: cleanName
+    };
+
+  } catch (error) {
+    console.error('Script name generation error:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
     };
   }
 }

@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Copy, Send, ThumbsUp, Code, Blocks, RefreshCw, Sparkles, Settings, AlertCircle, Check } from "lucide-react"
+import { Copy, Send, ThumbsUp, Code, Blocks, RefreshCw, Sparkles, Settings, AlertCircle, Check, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import confetti from "canvas-confetti"
@@ -14,8 +14,11 @@ import VoiceInput from "@/components/voice-input"
 import ModelSelector from "@/components/model-selector"
 import { generateScript, verifyApiKey, generateIdeaChips } from "@/lib/gemini"
 import ReactMarkdown from 'react-markdown'
+import { useGoogleAuth } from "@/lib/google-auth"
+import AppsScriptCreator from "@/components/apps-script-creator"
 
 export default function Home() {
+  const { isLoggedIn: isGoogleLoggedIn, accessToken: googleAccessToken } = useGoogleAuth();
   const [inputValue, setInputValue] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedCode, setGeneratedCode] = useState("")
@@ -36,6 +39,7 @@ export default function Home() {
   const [includeSampleCode, setIncludeSampleCode] = useState(true)
   const [showSettings, setShowSettings] = useState(false)
   const [elapsedTime, setElapsedTime] = useState(0)
+  const [showAppsScriptCreator, setShowAppsScriptCreator] = useState(false)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -427,45 +431,8 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFFAF5] flex flex-col">
-      <header className="border-b border-[#FF6B35]/20 p-3 md:p-4">
-        <div className="container max-w-7xl mx-auto px-4 flex items-center justify-between">
-          <motion.div
-            className="flex items-center gap-2"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            onClick={() => window.location.reload()}
-            style={{ cursor: 'pointer' }}
-          >
-            <Blocks className="h-8 w-8 text-[#FF6B35]" />
-            <h1 className="text-2xl font-bold text-[#FF6B35]">VibeCoder</h1>
-          </motion.div>
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="flex items-center gap-2"
-          >
-            {apiKey && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setApiKeyModalOpen(true)}
-                className="text-[#FF6B35] hover:bg-[#FF6B35]/10"
-              >
-                <Settings className="h-5 w-5" />
-                <span className="sr-only">API Key Settings</span>
-              </Button>
-            )}
-            <Button variant="outline" className="border-[#FF6B35] text-[#FF6B35] hover:bg-[#FF6B35]/10">
-              View Docs
-            </Button>
-          </motion.div>
-        </div>
-      </header>
-
-      <main className="flex-1 container max-w-7xl mx-auto px-4 py-6 md:py-12 space-y-6 md:space-y-12">
+    <>
+      <div className="container max-w-7xl mx-auto px-4 py-6 md:py-12 space-y-6 md:space-y-12">
         <AnimatePresence mode="wait">
           {showOnboarding ? (
             <motion.div
@@ -765,6 +732,27 @@ export default function Home() {
                                 <Copy className="mr-2 h-4 w-4" />
                                 Copy to Clipboard
                               </Button>
+                              {isGoogleLoggedIn && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    console.log('Google Access Token:', googleAccessToken ? 'Present' : 'Missing');
+                                    console.log('Token length:', googleAccessToken?.length || 0);
+                                    setShowAppsScriptCreator(true);
+                                    // Scroll to the Apps Script Creator section
+                                    setTimeout(() => {
+                                      const element = document.getElementById('apps-script-creator');
+                                      if (element) {
+                                        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                      }
+                                    }, 100);
+                                  }}
+                                  className="bg-green-600 hover:bg-green-700 text-white"
+                                >
+                                  <Plus className="mr-2 h-4 w-4" />
+                                  Create in Google
+                                </Button>
+                              )}
                             </div>
                           </div>
 
@@ -924,6 +912,31 @@ export default function Home() {
                             </motion.div>
                           )}
 
+
+
+                          {showAppsScriptCreator && (
+                            <motion.div
+                              id="apps-script-creator"
+                              initial={{ opacity: 0, y: 20 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="border-t border-gray-200 pt-4"
+                            >
+                              <AppsScriptCreator
+                                scriptCode={generatedCode}
+                                userDescription={inputValue || 'VibeCoder Script'}
+                                geminiApiKey={apiKey || undefined}
+                                googleAccessToken={googleAccessToken || undefined}
+                                onSuccess={() => {
+                                  // Show success message
+                                  triggerConfetti();
+                                }}
+                                onError={(error) => {
+                                  setError(error);
+                                }}
+                              />
+                            </motion.div>
+                          )}
+
                           <div className="flex justify-center pt-2">
                             <Button
                               variant="ghost"
@@ -934,6 +947,7 @@ export default function Home() {
                                 setShowFeedback(false)
                                 setFeedbackGiven(false)
                                 setShowRefinePrompt(false)
+                                setShowAppsScriptCreator(false)
                                 setError(null)
                               }}
                               className="text-[#FF6B35] hover:bg-[#FF6B35]/10"
@@ -950,7 +964,7 @@ export default function Home() {
             </motion.div>
           )}
         </AnimatePresence>
-      </main>
+      </div>
 
       <footer className="border-t border-[#FF6B35]/20 py-4">
         <div className="container max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between">
@@ -982,6 +996,6 @@ export default function Home() {
         initialApiKey={apiKey || ""}
         isOnboarding={false}
       />
-    </div>
+    </>
   )
 }

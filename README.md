@@ -5,6 +5,10 @@ VibeCoder is a modern web application that helps users build Google Apps Script 
 ## Features
 
 - **AI-Powered Script Generation**: Describe what you want to build, and VibeCoder generates complete, production-ready Google Apps Scripts
+- **Google Authentication**: Login with Google to manage your Apps Script projects
+- **Direct Script Creation**: Create Apps Script projects directly from the interface without copy-pasting
+- **Apps Script Management**: View and manage your existing Apps Script files
+- **Permission Testing**: Test your Google account permissions for Apps Script operations
 - **Interactive UI**: Modern, responsive design with animations and visual feedback
 - **Voice Input**: Speak your script requirements instead of typing
 - **Script Refinement**: Get feedback on generated scripts and request improvements
@@ -30,6 +34,7 @@ VibeCoder is a modern web application that helps users build Google Apps Script 
 - Node.js (version 18 or higher)
 - npm or yarn
 - Gemini API key for script generation
+- Google Cloud Console project with OAuth 2.0 credentials (for Google login functionality)
 
 ### Installation
 
@@ -45,6 +50,20 @@ npm install
 # or
 yarn install
 ```
+
+### Configuration
+
+1. **Set up Google OAuth 2.0 credentials:**
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select an existing one
+   - Enable the Google Apps Script API
+   - Create OAuth 2.0 credentials (Web application type)
+   - Add authorized JavaScript origins: `http://localhost:5173` (for development)
+   - Add authorized redirect URIs: `http://localhost:5173` (for development)
+
+2. **Configure environment variables:**
+   - Copy `env.template` to `.env`
+   - Add your Google Client ID: `VITE_GOOGLE_CLIENT_ID=your-client-id-here`
 
 ### Development
 

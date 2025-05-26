@@ -5,15 +5,17 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
-		"build": "tsc -b && vite build",
+		"build": "vite build && tsc --project tsconfig.worker.json",
 		"lint": "eslint .",
-		"preview": "npm run build && vite preview",
+		"preview": "npm run build && wrangler dev",
 		"deploy": "npm run build && wrangler deploy",
 		"cf-typegen": "wrangler types"
 	},
 	"dependencies": {
 		"@radix-ui/react-slot": "^1.2.0",
+		"@react-oauth/google": "^0.12.2",
 		"@tailwindcss/vite": "^4.1.4",
+		"@types/react-router-dom": "^5.3.3",
 		"canvas-confetti": "^1.9.3",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
@@ -22,6 +24,7 @@
 		"react": "^19.0.0",
 		"react-dom": "^19.0.0",
 		"react-markdown": "^10.1.0",
+		"react-router-dom": "^7.6.1",
 		"shadcn-ui": "^0.9.5",
 		"tailwind-merge": "^3.2.0"
 	},

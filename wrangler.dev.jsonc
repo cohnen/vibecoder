@@ -1,0 +1,9 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "vibecoder-dev",
+	"main": "worker/index.ts",
+	"compatibility_date": "2025-04-16",
+	"observability": {
+		"enabled": true
+	}
+} 
